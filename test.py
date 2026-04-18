@@ -1,32 +1,45 @@
+import tempfile
 import unittest
+from pathlib import Path
 
-class TestChurnModel(unittest.TestCase):
+import numpy as np
 
+from generate_sample_data import generate
+from main import ChurnPredictor
+
+
+class TestChurnPredictor(unittest.TestCase):
     def setUp(self):
-        # Initialize ChurnModel and any other necessary data
-        self.model = ChurnModel()  # Assuming ChurnModel is imported
-        self.data = self.load_data()  # Implement data loading
+        self.data = generate(300)
 
-    def load_data(self):
-        # Code to load and return your dataset for testing
-        pass
+    def test_train_and_predict(self):
+        predictor = ChurnPredictor(model_type='Random Forest')
+        metrics = predictor.train(self.data, test_size=0.25)
 
-    def test_data_preprocessing(self):
-        # Test if data preprocessing works correctly
-        preprocessed_data = self.model.preprocess_data(self.data)
-        self.assertIsNotNone(preprocessed_data)  # Checks if data is not None
-        # Add more assertions as necessary
+        self.assertIn('accuracy', metrics)
+        self.assertIn('roc_auc', metrics)
 
-    def test_model_training(self):
-        # Test model training
-        result = self.model.train(self.data)
-        self.assertTrue(result)  # Check if training is successful
+        result = predictor.predict(self.data.drop(columns=['Churn']).head(5))
+        self.assertEqual(len(result), 5)
+        self.assertIn('prediction', result.columns)
+        self.assertIn('churn_probability', result.columns)
 
-    def test_model_evaluation(self):
-        # Test model evaluation
-        metrics = self.model.evaluate(self.data)
-        self.assertIn('accuracy', metrics)  # Assuming metrics include accuracy
-        self.assertGreater(metrics['accuracy'], 0.5)  # Example assertion
+    def test_save_and_load_preserves_predictions(self):
+        predictor = ChurnPredictor(model_type='Logistic Regression')
+        predictor.train(self.data, test_size=0.2)
+
+        sample = self.data.drop(columns=['Churn']).head(10)
+        before = predictor.predict(sample)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir) / 'churn_model.pkl'
+            predictor.save(str(model_path))
+            reloaded = ChurnPredictor.load(str(model_path))
+            after = reloaded.predict(sample)
+
+        self.assertListEqual(before['prediction'].tolist(), after['prediction'].tolist())
+        np.testing.assert_allclose(before['churn_probability'].to_numpy(), after['churn_probability'].to_numpy())
+
 
 if __name__ == '__main__':
     unittest.main()

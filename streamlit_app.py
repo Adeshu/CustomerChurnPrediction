@@ -1,65 +1,142 @@
-import streamlit as st
+from pathlib import Path
+
 import pandas as pd
-import numpy as np
 import plotly.express as px
+import streamlit as st
 
-# Custom CSS styling
-st.markdown('<style>body{background-color: #f5f5f5;} .metric-card{border: 1px solid #d1d1d1; border-radius: 12px; padding: 10px; margin: 10px 0;}</style>', unsafe_allow_html=True)
+from main import ChurnPredictor
 
-# Title
-st.title('Customer Churn Prediction')
+st.set_page_config(page_title='Customer Churn Prediction', layout='wide')
 
-# Sidebar navigation
-st.sidebar.title('Navigation')
-options = st.sidebar.radio('Select a page:', ['Dashboard', 'Single Prediction', 'Batch Upload', 'Analytics'])
+DEFAULT_MODEL_PATH = 'models/churn_model.pkl'
+HIGH_RISK_THRESHOLD = 0.7
+MEDIUM_RISK_THRESHOLD = 0.4
 
-# Load dataset
-@st.cache
-def load_data():
-    # This is just a placeholder. Load your actual dataset here.
-    data = pd.DataFrame({
-        'CustomerID': range(1, 101),
-        'Churn': np.random.choice([0, 1], size=100),
-        'Tenure': np.random.randint(1, 73, size=100),
-        'MonthlyCharges': np.random.uniform(20.0, 120.0, size=100)
-    })
-    return data
+DEFAULT_INPUT = {
+    'gender': 'Female',
+    'SeniorCitizen': 0,
+    'Partner': 'No',
+    'Dependents': 'Yes',
+    'tenure': 24,
+    'PhoneService': 'Yes',
+    'MultipleLines': 'No',
+    'InternetService': 'DSL',
+    'OnlineSecurity': 'No',
+    'OnlineBackup': 'Yes',
+    'DeviceProtection': 'No',
+    'TechSupport': 'No',
+    'StreamingTV': 'No',
+    'StreamingMovies': 'No',
+    'Contract': 'Month-to-month',
+    'PaperlessBilling': 'Yes',
+    'PaymentMethod': 'Electronic check',
+    'MonthlyCharges': 70.0,
+    'TotalCharges': 1680.0,
+}
 
-data = load_data()
 
-# Dashboard page
-if options == 'Dashboard':
-    st.header('Dashboard')
-    fig = px.histogram(data, x='Tenure', color='Churn', title='Customer Churn by Tenure')
-    st.plotly_chart(fig)
-    churn_rate = data['Churn'].mean() * 100
-    st.markdown(f'<div class="metric-card"><h3>Churn Rate</h3><h1>{churn_rate:.2f}%</h1></div>', unsafe_allow_html=True)
+@st.cache_resource
+def load_predictor(model_path: str):
+    if not Path(model_path).exists():
+        return None
+    return ChurnPredictor.load(model_path)
 
-# Single prediction page
-elif options == 'Single Prediction':
-    st.header('Single Prediction')
-    tenure = st.number_input('Customer Tenure (months)', min_value=1, max_value=72)
-    monthly_charges = st.number_input('Monthly Charges', min_value=20.0, max_value=120.0)
-    if st.button('Predict'):
-        # Placeholder for predictive model
-        prediction = 'Yes' if np.random.rand() > 0.5 else 'No'
-        st.write('Churn Prediction:', prediction)
 
-# Batch upload page
-elif options == 'Batch Upload':
-    st.header('Batch Upload')
-    uploaded_file = st.file_uploader('Upload CSV file', type=['csv'])
-    if uploaded_file:
-        batch_data = pd.read_csv(uploaded_file)
-        # Process predictions (placeholder)
-        st.write(batch_data)
+@st.cache_data
+def load_metrics(metrics_path: str):
+    path = Path(metrics_path)
+    if not path.exists():
+        return None
+    return pd.read_json(path, typ='series')
 
-# Analytics page
-elif options == 'Analytics':
-    st.header('Analytics')
-    # Placeholder for analytics content
-    st.write('Analytics content goes here...')
 
-# Run the app
+def customer_input_form() -> pd.DataFrame:
+    st.sidebar.header('Customer Details')
+
+    input_payload = DEFAULT_INPUT.copy()
+
+    input_payload['gender'] = st.sidebar.selectbox('Gender', ['Male', 'Female'])
+    input_payload['SeniorCitizen'] = st.sidebar.selectbox('Senior Citizen', [0, 1])
+    input_payload['Partner'] = st.sidebar.selectbox('Partner', ['Yes', 'No'])
+    input_payload['Dependents'] = st.sidebar.selectbox('Dependents', ['Yes', 'No'])
+    input_payload['tenure'] = st.sidebar.slider('Tenure (months)', min_value=0, max_value=72, value=24)
+    input_payload['PhoneService'] = st.sidebar.selectbox('Phone Service', ['Yes', 'No'])
+    input_payload['MultipleLines'] = st.sidebar.selectbox('Multiple Lines', ['Yes', 'No', 'No phone service'])
+    input_payload['InternetService'] = st.sidebar.selectbox('Internet Service', ['DSL', 'Fiber optic', 'No'])
+    input_payload['OnlineSecurity'] = st.sidebar.selectbox('Online Security', ['Yes', 'No', 'No internet service'])
+    input_payload['OnlineBackup'] = st.sidebar.selectbox('Online Backup', ['Yes', 'No', 'No internet service'])
+    input_payload['DeviceProtection'] = st.sidebar.selectbox('Device Protection', ['Yes', 'No', 'No internet service'])
+    input_payload['TechSupport'] = st.sidebar.selectbox('Tech Support', ['Yes', 'No', 'No internet service'])
+    input_payload['StreamingTV'] = st.sidebar.selectbox('Streaming TV', ['Yes', 'No', 'No internet service'])
+    input_payload['StreamingMovies'] = st.sidebar.selectbox('Streaming Movies', ['Yes', 'No', 'No internet service'])
+    input_payload['Contract'] = st.sidebar.selectbox('Contract', ['Month-to-month', 'One year', 'Two year'])
+    input_payload['PaperlessBilling'] = st.sidebar.selectbox('Paperless Billing', ['Yes', 'No'])
+    input_payload['PaymentMethod'] = st.sidebar.selectbox(
+        'Payment Method',
+        ['Electronic check', 'Mailed check', 'Bank transfer (automatic)', 'Credit card (automatic)'],
+    )
+    input_payload['MonthlyCharges'] = st.sidebar.slider('Monthly Charges ($)', min_value=18.0, max_value=130.0, value=70.0)
+    input_payload['TotalCharges'] = st.sidebar.slider('Total Charges ($)', min_value=0.0, max_value=9000.0, value=1680.0)
+
+    return pd.DataFrame([input_payload])
+
+
+def risk_label(probability: float) -> str:
+    if probability >= HIGH_RISK_THRESHOLD:
+        return 'High Risk'
+    if probability >= MEDIUM_RISK_THRESHOLD:
+        return 'Medium Risk'
+    return 'Low Risk'
+
+
+def main():
+    st.title('🔮 Customer Churn Prediction')
+    st.write('Production inference app using the trained model artifact and feature encoders.')
+
+    predictor = load_predictor(DEFAULT_MODEL_PATH)
+
+    if predictor is None:
+        st.error(f'Model artifact not found at `{DEFAULT_MODEL_PATH}`. Train first with `python main.py --data <csv>`.')
+        st.stop()
+
+    st.success('Model loaded successfully.')
+
+    cols = st.columns(2)
+    with cols[0]:
+        metrics = load_metrics('models/metrics.json')
+        if metrics is not None:
+            st.metric('Test Accuracy', f"{float(metrics['accuracy']):.3f}")
+            st.metric('Test ROC-AUC', f"{float(metrics['roc_auc']):.3f}")
+
+    with cols[1]:
+        if st.button('Show Feature List'):
+            st.write(predictor.feature_columns)
+
+    customer_df = customer_input_form()
+
+    if st.button('Predict Churn', use_container_width=True):
+        result = predictor.predict(customer_df).iloc[0]
+        prob = float(result['churn_probability'])
+        prediction = str(result['prediction'])
+
+        rcol1, rcol2, rcol3 = st.columns(3)
+        rcol1.metric('Prediction', prediction)
+        rcol2.metric('Churn Probability', f'{prob * 100:.2f}%')
+        rcol3.metric('Risk Assessment', risk_label(prob))
+
+        fig = px.bar(
+            x=['Stay', 'Churn'],
+            y=[1 - prob, prob],
+            labels={'x': 'Outcome', 'y': 'Probability'},
+            title='Prediction Probability Distribution',
+            color=['Stay', 'Churn'],
+            color_discrete_map={'Stay': '#2ca02c', 'Churn': '#d62728'},
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader('Input Payload')
+        st.dataframe(customer_df, use_container_width=True)
+
+
 if __name__ == '__main__':
-    st.write('Streamlit app is running...')
+    main()
