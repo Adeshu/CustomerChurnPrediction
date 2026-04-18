@@ -5,7 +5,7 @@
 ```bash
 python generate_sample_data.py --rows 2000 --output data/customer_churn.csv
 python main.py --data data/customer_churn.csv --model "Random Forest"
-python predict.py --model models/churn_model.pkl --input data/customer_churn.csv --output models/predictions.csv
+python predict.py --input data/customer_churn.csv --output models/predictions.csv
 streamlit run streamlit_app.py
 ```
 

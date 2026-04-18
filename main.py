@@ -22,20 +22,28 @@ class ChurnPredictor:
     def __init__(self, model_type: str = 'Random Forest', random_state: int = 42):
         self.model_type = model_type
         self.random_state = random_state
-        self.model = self._build_model(model_type)
+        self.model = self._build_model(model_type, random_state)
         self.feature_encoders: Dict[str, LabelEncoder] = {}
         self.target_encoder: Optional[LabelEncoder] = None
         self.feature_columns: List[str] = []
         self.categorical_columns: List[str] = []
 
     @staticmethod
-    def _build_model(model_type: str):
+    def _build_model(model_type: str, random_state: int):
         model_type_key = model_type.strip().lower()
         if model_type_key in {'random forest', 'random_forest', 'rf'}:
-            return RandomForestClassifier(n_estimators=300, random_state=42)
+            return RandomForestClassifier(n_estimators=300, random_state=random_state)
         if model_type_key in {'logistic regression', 'logistic_regression', 'lr'}:
-            return LogisticRegression(max_iter=1000, random_state=42)
+            return LogisticRegression(max_iter=1000, random_state=random_state)
         raise ValueError(f'Unsupported model type: {model_type}')
+
+    @staticmethod
+    def _normalize_target_value(value: str) -> str:
+        return 'Yes' if str(value).strip().lower() in {'1', 'yes', 'true'} else 'No'
+
+    @staticmethod
+    def _map_unknown_category(value: str, encoder: LabelEncoder) -> str:
+        return value if value in encoder.classes_ else '__unknown__'
 
     @staticmethod
     def _normalize_total_charges(df: pd.DataFrame) -> pd.DataFrame:
@@ -75,13 +83,13 @@ class ChurnPredictor:
                 classes.append('__unknown__')
             encoder.fit(classes)
             self.feature_encoders[col] = encoder
-            X[col] = values.map(lambda v: v if v in encoder.classes_ else '__unknown__')
+            X[col] = values.map(lambda v: self._map_unknown_category(v, encoder))
             X[col] = encoder.transform(X[col])
 
         self.target_encoder = LabelEncoder()
         self.target_encoder.fit(['No', 'Yes'])
         y = pd.Series(
-            self.target_encoder.transform(y_raw.map(lambda v: 'Yes' if str(v).strip().lower() in {'1', 'yes', 'true'} else 'No')),
+            self.target_encoder.transform(y_raw.map(self._normalize_target_value)),
             index=df.index,
         )
 
@@ -103,7 +111,7 @@ class ChurnPredictor:
         for col in self.categorical_columns:
             encoder = self.feature_encoders[col]
             values = X[col].fillna('Unknown').astype(str)
-            values = values.map(lambda v: v if v in encoder.classes_ else '__unknown__')
+            values = values.map(lambda v: self._map_unknown_category(v, encoder))
             X[col] = encoder.transform(values)
 
         return X
@@ -131,7 +139,7 @@ class ChurnPredictor:
             'accuracy': float(accuracy_score(y_test, predictions)),
             'roc_auc': float(roc_auc_score(y_test, probabilities)),
             'confusion_matrix': confusion_matrix(y_test, predictions).tolist(),
-            'classification_report': classification_report(y_test, predictions, target_names=self.target_encoder.classes_, output_dict=True),
+            'classification_report': classification_report(y_test, predictions, target_names=['No', 'Yes'], output_dict=True),
         }
 
         LOGGER.info('Accuracy: %.4f', metrics['accuracy'])
@@ -192,7 +200,7 @@ def main():
 
     metrics_out = Path(args.metrics_out)
     metrics_out.parent.mkdir(parents=True, exist_ok=True)
-    metrics_out.write_text(json.dumps(metrics, indent=2), encoding='utf-8')
+    metrics_out.write_text(json.dumps(metrics, indent=2, default=float), encoding='utf-8')
     LOGGER.info('Saved evaluation metrics: %s', metrics_out)
 
 

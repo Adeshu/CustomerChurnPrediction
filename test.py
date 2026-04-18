@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from generate_sample_data import generate
 from main import ChurnPredictor
 
@@ -36,6 +38,7 @@ class TestChurnPredictor(unittest.TestCase):
             after = reloaded.predict(sample)
 
         self.assertListEqual(before['prediction'].tolist(), after['prediction'].tolist())
+        np.testing.assert_allclose(before['churn_probability'].to_numpy(), after['churn_probability'].to_numpy())
 
 
 if __name__ == '__main__':

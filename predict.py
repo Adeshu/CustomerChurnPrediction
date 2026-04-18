@@ -5,10 +5,11 @@ import pandas as pd
 
 from main import ChurnPredictor
 
+DEFAULT_MODEL_PATH = 'models/churn_model.pkl'
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run churn predictions from a saved model artifact')
-    parser.add_argument('--model', type=str, default='models/churn_model.pkl', help='Path to model artifact')
     parser.add_argument('--input', type=str, required=True, help='Input CSV for batch prediction')
     parser.add_argument('--output', type=str, default='models/predictions.csv', help='Output CSV path')
     return parser.parse_args()
@@ -16,7 +17,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-    predictor = ChurnPredictor.load(args.model)
+    if not Path(DEFAULT_MODEL_PATH).exists():
+        raise FileNotFoundError(
+            f'Model artifact not found at {DEFAULT_MODEL_PATH}. Train first with: '
+            'python main.py --data data/customer_churn.csv --model \"Random Forest\"'
+        )
+    predictor = ChurnPredictor.load(DEFAULT_MODEL_PATH)
     input_df = pd.read_csv(args.input)
 
     predictions = predictor.predict(input_df)

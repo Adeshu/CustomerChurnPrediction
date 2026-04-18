@@ -11,6 +11,7 @@ RNG = np.random.default_rng(42)
 def generate(n_rows: int) -> pd.DataFrame:
     tenure = RNG.integers(0, 73, size=n_rows)
     monthly = np.round(RNG.uniform(18.0, 120.0, size=n_rows), 2)
+    # Multiplier introduces realistic billing variance (taxes, discounts, one-time fees).
     total = np.round(monthly * np.maximum(tenure, 1) * RNG.uniform(0.6, 1.4, size=n_rows), 2)
 
     contract = RNG.choice(['Month-to-month', 'One year', 'Two year'], size=n_rows, p=[0.55, 0.25, 0.20])

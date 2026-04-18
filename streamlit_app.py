@@ -9,6 +9,8 @@ from main import ChurnPredictor
 st.set_page_config(page_title='Customer Churn Prediction', layout='wide')
 
 DEFAULT_MODEL_PATH = 'models/churn_model.pkl'
+HIGH_RISK_THRESHOLD = 0.7
+MEDIUM_RISK_THRESHOLD = 0.4
 
 DEFAULT_INPUT = {
     'gender': 'Female',
@@ -80,9 +82,9 @@ def customer_input_form() -> pd.DataFrame:
 
 
 def risk_label(probability: float) -> str:
-    if probability >= 0.7:
+    if probability >= HIGH_RISK_THRESHOLD:
         return 'High Risk'
-    if probability >= 0.4:
+    if probability >= MEDIUM_RISK_THRESHOLD:
         return 'Medium Risk'
     return 'Low Risk'
 
@@ -91,11 +93,10 @@ def main():
     st.title('🔮 Customer Churn Prediction')
     st.write('Production inference app using the trained model artifact and feature encoders.')
 
-    model_path = st.text_input('Model artifact path', value=DEFAULT_MODEL_PATH)
-    predictor = load_predictor(model_path)
+    predictor = load_predictor(DEFAULT_MODEL_PATH)
 
     if predictor is None:
-        st.error(f'Model artifact not found at `{model_path}`. Train first with `python main.py --data <csv>`.')
+        st.error(f'Model artifact not found at `{DEFAULT_MODEL_PATH}`. Train first with `python main.py --data <csv>`.')
         st.stop()
 
     st.success('Model loaded successfully.')
@@ -104,8 +105,8 @@ def main():
     with cols[0]:
         metrics = load_metrics('models/metrics.json')
         if metrics is not None:
-            st.metric('Validation Accuracy', f"{float(metrics['accuracy']):.3f}")
-            st.metric('Validation ROC-AUC', f"{float(metrics['roc_auc']):.3f}")
+            st.metric('Test Accuracy', f"{float(metrics['accuracy']):.3f}")
+            st.metric('Test ROC-AUC', f"{float(metrics['roc_auc']):.3f}")
 
     with cols[1]:
         if st.button('Show Feature List'):
@@ -129,6 +130,7 @@ def main():
             labels={'x': 'Outcome', 'y': 'Probability'},
             title='Prediction Probability Distribution',
             color=['Stay', 'Churn'],
+            color_discrete_map={'Stay': '#2ca02c', 'Churn': '#d62728'},
         )
         st.plotly_chart(fig, use_container_width=True)
 
