@@ -1,0 +1,22 @@
+# Python cache files
+__pycache__/
+*.pyc
+
+# Model artifacts
+*.h5
+*.pkl
+
+# Virtual environments
+venv/
+.env
+
+# IDE settings
+.idea/
+*.sublime-* 
+*.vscode/
+
+# Data files
+*.csv
+*.json
+*.xlsx
+*.xls
