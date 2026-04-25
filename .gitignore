@@ -5,6 +5,7 @@ __pycache__/
 # Model artifacts
 *.h5
 *.pkl
+models/
 
 # Virtual environments
 venv/
@@ -12,11 +13,14 @@ venv/
 
 # IDE settings
 .idea/
-*.sublime-* 
+*.sublime-*
 *.vscode/
 
-# Data files
+# Data files (privacy-first; keep sample generator outputs local)
 *.csv
 *.json
 *.xlsx
 *.xls
+
+# Keep reproducibility metadata tracked
+!requirements.txt
